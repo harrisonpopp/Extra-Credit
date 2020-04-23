@@ -1,0 +1,87 @@
+---
+title: "Extra Credit Assingment"
+author: "Harrison Popp"
+date: "4/22/2020"
+output: html_document
+---
+
+```{r}
+library(readr)
+AXISBANK <- read_csv("Nifty50/AXISBANK.csv")
+library(tidyverse)
+library(tidymodels)
+library(ISLR)
+install.packages("ranger")
+```
+
+The research question I am looking to answer here is what relationships do the low, previous close, open, and volume for the stock UTIBANK ticker affect the prediction for the high that day? I want to use these variables to predict the high of the stock price for each day
+
+```{r}
+set.seed(7)
+Axis_cv <- vfold_cv(AXISBANK, v=10)
+bagging_spec <- rand_forest(trees = tune(), mode = "regression", mtry = 10) %>%
+  set_engine("ranger")
+grid <- expand_grid(trees = c(10,50,100,200,500))
+model2 <- tune_grid(bagging_spec, high ~ ., grid = grid, resamples = Axis_cv)
+```
+
+```{r}
+Axisb <- model2 %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  arrange(mean)
+ggplot(xbag, aes(x = trees, y = mean)) + 
+  geom_point() + 
+  geom_line() + 
+  labs(y = "rmse")
+Axisb
+```
+
+
+```{r}
+set.seed(7)
+boost_spec <- boost_tree(
+  mode = "regression", 
+  tree_depth = 1, 
+  trees = tune(), 
+  learn_rate = 0.1, 
+) %>% 
+  set_engine("xgboost")
+grid <- expand_grid(trees = c(10,50,100,200,500))
+Model_rec <- recipe(High~Low,Open,Volume,Close, data = AXISBANK)
+Boost_model <- tune_grid(boost_spec, High ~., grid = grid, resamples = Axis_cv)
+xboost <- Boost_model %>%
+  collect_metrics() %>%
+  filter(.metric == "rmse") %>%
+  arrange(mean)
+```
+
+```{r}
+
+ggplot(xboost, aes(x = trees, y = mean)) + 
+  geom_point() + 
+  geom_line() + 
+  labs(y = "rmse")
+xboost
+```
+
+```{r}
+ridge_spec <- linear_reg(penalty = tune(), mixture = 0) %>%
+  set_engine("glmnet")
+
+grid <- expand_grid(penalty = seq(0, 100, by = 10))
+
+rec <- recipe(Close ~., data = AXISBANK) %>%
+  step_scale(all_predictors()) %>%
+  step_dummy(all_nominal())
+
+results <- tune_grid(ridge_spec,
+                     preprocessor = rec,
+                     grid = grid,
+                     resamples = Axis_cv)
+results%>%
+  collect_metrics()%>%
+  filter(.metric == "rmse")%>%
+  arrange(mean)
+```
+
