@@ -16,62 +16,14 @@ install.packages("ranger")
 
 The research question I am looking to answer here is what relationships do the low, previous close, open, and volume for the stock UTIBANK ticker affect the prediction for the high that day? I want to use these variables to predict the high of the stock price for each day
 
-```{r}
-set.seed(7)
-Axis_cv <- vfold_cv(AXISBANK, v=10)
-bagging_spec <- rand_forest(trees = tune(), mode = "regression", mtry = 10) %>%
-  set_engine("ranger")
-grid <- expand_grid(trees = c(10,50,100,200,500))
-model2 <- tune_grid(bagging_spec, high ~ ., grid = grid, resamples = Axis_cv)
-```
 
-```{r}
-Axisb <- model2 %>%
-  collect_metrics() %>%
-  filter(.metric == "rmse") %>%
-  arrange(mean)
-ggplot(xbag, aes(x = trees, y = mean)) + 
-  geom_point() + 
-  geom_line() + 
-  labs(y = "rmse")
-Axisb
-```
-
-
-```{r}
-set.seed(7)
-boost_spec <- boost_tree(
-  mode = "regression", 
-  tree_depth = 1, 
-  trees = tune(), 
-  learn_rate = 0.1, 
-) %>% 
-  set_engine("xgboost")
-grid <- expand_grid(trees = c(10,50,100,200,500))
-Model_rec <- recipe(High~Low,Open,Volume,Close, data = AXISBANK)
-Boost_model <- tune_grid(boost_spec, High ~., grid = grid, resamples = Axis_cv)
-xboost <- Boost_model %>%
-  collect_metrics() %>%
-  filter(.metric == "rmse") %>%
-  arrange(mean)
-```
-
-```{r}
-
-ggplot(xboost, aes(x = trees, y = mean)) + 
-  geom_point() + 
-  geom_line() + 
-  labs(y = "rmse")
-xboost
-```
-
-```{r}
+```{r, Tuning to get penalty}
 ridge_spec <- linear_reg(penalty = tune(), mixture = 0) %>%
   set_engine("glmnet")
 
-grid <- expand_grid(penalty = seq(0, 100, by = 10))
+grid <- expand_grid(penalty = seq(0, 10, by = 1))
 
-rec <- recipe(Close ~., data = AXISBANK) %>%
+rec <- recipe(Close ~ Volume + Open + High + Low, data = AXISBANK) %>%
   step_scale(all_predictors()) %>%
   step_dummy(all_nominal())
 
@@ -85,3 +37,16 @@ results%>%
   arrange(mean)
 ```
 
+I decidided to tune the penalty for the model, I first tuned from 0-100 by 10s then realizes 0 was the best, and then did 0-10 by 1s and found 0 to still be the best, so I used that in my model.
+
+```{r}
+ridge_final <- linear_reg(penalty = 0, mixture = 0) %>%
+  set_engine("glmnet")
+rec2 <- recipe(Close ~ Volume + Open + High + Low, data = AXISBANK) %>%
+  step_scale(all_predictors()) %>%
+  step_dummy(all_nominal())
+
+rec2
+```
+
+For my evaluation, I think that this model is not the best option for this data set, it is not easy to understand and I was not able to gain any insight into where the stock will close the day on price. I think that tuning worked well except that tuning led to 0 which is essentially linear regression so ridge may not have been a great choice. I think if I could have chosen from models outside of what we have worked on in class I would have used some QDA then linear regression and depending on the fit transform the data if needed. I do think this was an interesting experience where I learned a lot more about R and had to research on my own. I did enjoy looking through data sets trying to find interesting sets that I would want to try and predict some relationship. At first I wanted to use a National Hockey League dataset but it was pretty dated and didn't have the variables I was hoping for so I transitioned into any stock market information I could find and that's how I ended up with this.
